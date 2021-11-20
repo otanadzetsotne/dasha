@@ -1,17 +1,19 @@
 import os
 import json
 
+import openai
 import pyaudio
 from vosk import Model
 from vosk import KaldiRecognizer
 from pymorphy2 import MorphAnalyzer
 
 from configs import *
+from translators import TranslatorEnRu, TranslatorRuEn
 
 
 class Recognizer:
     def __init__(self):
-        self.model = Model('model')
+        self.model = Model('model_small')
         self.kaldi = KaldiRecognizer(self.model, 16_000)
 
     def accept_wave(self, wave):
@@ -64,11 +66,21 @@ class Tokenizer:
         return tokens
 
 
-class Dasha:
+class Katya:
     def __init__(self):
+        print('Начало инициализации бота')
+
+        print('Инициализация модели')
         self.recognizer = Recognizer()
+        print('Инициализация токенизатора')
         self.tokenizer = Tokenizer()
+        print('Инициализация слушателя')
         self.listener = Listener()
+        print('Инициализация переводчиков')
+        self.translator_ru_en = TranslatorRuEn()
+        self.translator_en_ru = TranslatorEnRu()
+
+        print('Готово')
 
     def awake(self):
         """
@@ -80,6 +92,7 @@ class Dasha:
         self.listener.start()
 
         while True:
+            print('Слушает')
             # Listen audio batch
             wave = self.listener.read(4000, exception_on_overflow=False)
 
@@ -93,21 +106,42 @@ class Dasha:
                 speech = self.recognizer.result()
                 speech = json.loads(speech)
                 speech = speech['text']
-                # Process speech
-                self.listen(speech)
+                print(f'Услышано "{speech}"')
 
-    def listen(self, speech):
+                # Process speech
+                self.process(speech)
+
+    def process(self, speech):
         """
         Process request
         :param speech:
         :return:
         """
 
-        if self.is_command_sleep(speech):
-            self.sleep()
+        appeal = speech.split()[0]
 
-        if self.is_call(speech):
-            self.command(speech)
+        if self.is_appeal(appeal):
+            words = speech.split()[1:]
+            speech = ''.join(words)
+
+            print(f'Получено обращение "{speech}"')
+
+            if self.is_command_sleep(speech):
+                self.sleep()
+
+            speech_translated = self.translator_ru_en.translate(speech)
+
+            answer = ''
+            response = openai.Completion.create(
+                engine='davinci',
+
+            )
+            # Обрабатываем запрос по api
+
+            answer_translated = self.translator_en_ru.translate(answer)
+
+            # Преобразование сообщения в звуковые данные
+            # Вывод сообщения на динамики
 
     def command(self, speech):
         """
@@ -130,15 +164,14 @@ class Dasha:
         exit(1)
 
     @staticmethod
-    def is_call(speech):
+    def is_appeal(appeal):
         """
         Was Dasha called
-        :param speech:
+        :param appeal:
         :return: bool
         """
 
-        # TODO: delete 'or True'
-        return any(name_alias in speech.split() for name_alias in BOT_NAME_ALIASES) or True
+        return appeal in BOT_NAME_ALIASES
 
     @staticmethod
     def is_command_sleep(speech):
@@ -152,4 +185,4 @@ class Dasha:
 
 
 if __name__ == '__main__':
-    Dasha().awake()
+    Katya().awake()
